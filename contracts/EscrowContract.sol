@@ -69,4 +69,21 @@ contract EscrowContract {
 
         return code;
     }
+
+    function initiateEscrow(uint256 _code, uint256 _nftId, address _nftAddress) external {
+        require(whitelistedNFTs[_nftAddress], "NFT is not whitelisted");
+        require(IERC721(_nftAddress).ownerOf(_nftId) == msg.sender, "Not the owner of the NFT");
+
+        usdc.transferFrom(msg.sender, address(this), escrows[_code].price);
+        escrows[_code].nftOwner = msg.sender;
+    }
+
+    function markWorkCompleted(uint256 _code) external onlyCreator(_code) {
+        escrows[_code].workCompleted = true;
+    }
+
+    function releaseFunds(uint256 _code) external onlyNFTOwner(_code) {
+        require(escrows[_code].workCompleted, "Work is not completed yet");
+        usdc.transfer(escrows[_code].creator, escrows[_code].price);
+    }
 }

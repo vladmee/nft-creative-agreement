@@ -9,8 +9,10 @@ const { developmentChains } = require("../../helper-hardhat-config")
               deployer,
               usdc,
               nftContract,
+              nft,
               code,
-              ipfsLink = "QmVLwvmGehsrNEvhcCnnsw5RQNseohgEkFNN1848ZNzdng"
+              ipfsLink = "QmVLwvmGehsrNEvhcCnnsw5RQNseohgEkFNN1848ZNzdng",
+              nftId
 
           beforeEach(async () => {
               accounts = await ethers.getSigners()
@@ -21,10 +23,28 @@ const { developmentChains } = require("../../helper-hardhat-config")
 
               const usdcContract = await deployments.get("MockUSDC")
               const escrowContract = await deployments.get("EscrowContract")
+              nftContract = await deployments.get("MockNFT")
 
               usdc = await ethers.getContractAt(usdcContract.abi, usdcContract.address)
               escrow = await ethers.getContractAt(escrowContract.abi, escrowContract.address)
-              nftContract = await deployments.get("MockNFT")
+              nft = await ethers.getContractAt(nftContract.abi, nftContract.address)
+
+              // Mint some USDC for deployer and approve for escrow
+              try {
+                  await usdc.connect(deployer).mint(deployer.address, ethers.parseUnits("1000", 6))
+                  await usdc
+                      .connect(deployer)
+                      .approve(escrowContract.address, ethers.parseUnits("1000", 6))
+              } catch (error) {
+                  console.error("Error during mint and approve:", error)
+              }
+
+              //Mint the NFT
+              await nft.mintNft()
+              const tokenCounter = await nft.getTokenCounter()
+              const nftIdBN = ethers.parseUnits(tokenCounter.toString(), 6)
+              const one = ethers.parseUnits("1", 6)
+              nftId = (nftIdBN - one).toString()
 
               // Whitelist the NFT contract
               await escrow.whitelistNFT(nftContract.address)
@@ -69,6 +89,63 @@ const { developmentChains } = require("../../helper-hardhat-config")
 
               // Further assertions based on the event can be done here
               const args = event.args
+              code = args[0].toString()
               assert.equal(args[2], ipfsLink, "IPFS Link not set correctly")
+          })
+
+          it("Should allow an NFT owner to initiate an escrow", async () => {
+              await escrow.addIPFSLink(ipfsLink, ethers.parseUnits("25", 6))
+
+              try {
+                  await escrow.initiateEscrow(code, nftId, nftContract.address)
+              } catch (error) {
+                  console.error("Error during initiateEscrow:", error)
+              }
+
+              const escrowInfo = await escrow.escrows(code)
+
+              assert.equal(
+                  escrowInfo.price.toString(),
+                  ethers.parseUnits("25", 6).toString(),
+                  "Price not set correctly",
+              )
+          })
+
+          it("Should allow the creator to mark work as completed", async () => {
+              await escrow.addIPFSLink(ipfsLink, ethers.parseUnits("25", 6))
+              await escrow.initiateEscrow(code, nftId, nftContract.address)
+
+              await escrow.markWorkCompleted(code)
+              const escrowInfo = await escrow.escrows(code)
+              assert.isTrue(escrowInfo.workCompleted, "Work should be marked as completed")
+          })
+
+          it("Should allow NFT owner to release funds after work completion", async () => {
+              await escrow.addIPFSLink(ipfsLink, ethers.parseUnits("25", 6))
+              await escrow.initiateEscrow(code, nftId, nftContract.address)
+              await escrow.markWorkCompleted(code)
+
+              const initialBalance = await usdc.balanceOf(deployer.address)
+
+              await escrow.releaseFunds(code)
+
+              const finalBalance = await usdc.balanceOf(deployer.address)
+
+              const difference = finalBalance - initialBalance
+
+              assert.equal(
+                  difference.toString(),
+                  ethers.parseUnits("25", 6).toString(),
+                  "Funds not released correctly",
+              )
+          })
+
+          it("Should not allow releasing funds without work completion", async () => {
+              await escrow.addIPFSLink(ipfsLink, ethers.parseUnits("25", 6))
+              await escrow.initiateEscrow(code, nftId, nftContract.address)
+
+              await expect(escrow.releaseFunds(code)).to.be.revertedWith(
+                  "Work is not completed yet",
+              )
           })
       })
