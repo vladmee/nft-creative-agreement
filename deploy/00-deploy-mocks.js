@@ -11,6 +11,13 @@ module.exports = async ({ getNamedAccounts, deployments }) => {
             from: deployer,
             args: [],
             log: true,
+            waitConfirmations: network.config.blockConfirmations || 1,
+        })
+        await deploy("MockNFT", {
+            from: deployer,
+            args: [],
+            log: true,
+            waitConfirmations: network.config.blockConfirmations || 1,
         })
 
         log("Mocks Deployed!")

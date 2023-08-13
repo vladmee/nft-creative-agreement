@@ -20,6 +20,19 @@ module.exports = async ({ getNamedAccounts, deployments }) => {
         mockUSDC = await get("MockUSDC")
     }
 
+    let mockNFT
+    try {
+        mockNFT = await get("MockNFT")
+    } catch (error) {
+        log("MockNFT not found. Deploying now...")
+        const mockNFTDeployment = await deploy("MockNFT", {
+            from: deployer,
+            log: true,
+            waitConfirmations: network.config.blockConfirmations || 1,
+        })
+        mockNFT = await get("MockNFT")
+    }
+
     const mockUSDCAddress = mockUSDC.address
     const arguments = [mockUSDCAddress]
     const escrow = await deploy("EscrowContract", {
