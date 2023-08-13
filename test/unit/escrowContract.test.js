@@ -5,7 +5,12 @@ const { developmentChains } = require("../../helper-hardhat-config")
 !developmentChains.includes(network.name)
     ? describe.skip
     : describe("Escrow Contract Unit Tests", function () {
-          let escrow, deployer, usdc, nftContract
+          let escrow,
+              deployer,
+              usdc,
+              nftContract,
+              code,
+              ipfsLink = "QmVLwvmGehsrNEvhcCnnsw5RQNseohgEkFNN1848ZNzdng"
 
           beforeEach(async () => {
               accounts = await ethers.getSigners()
@@ -20,6 +25,9 @@ const { developmentChains } = require("../../helper-hardhat-config")
               usdc = await ethers.getContractAt(usdcContract.abi, usdcContract.address)
               escrow = await ethers.getContractAt(escrowContract.abi, escrowContract.address)
               nftContract = await deployments.get("MockNFT")
+
+              // Whitelist the NFT contract
+              await escrow.whitelistNFT(nftContract.address)
           })
 
           describe("Constructor", () => {
@@ -42,5 +50,25 @@ const { developmentChains } = require("../../helper-hardhat-config")
                       escrow.connect(nonAdmin).whitelistNFT(nftContract.address),
                   ).to.be.revertedWith("Not the admin")
               })
+          })
+
+          it("Should allow a creator to add an IPFS link", async () => {
+              const tx = await escrow.addIPFSLink(ipfsLink, ethers.parseUnits("25", 6))
+              const receipt = await tx.wait()
+
+              // Ensure that there are logs in the receipt
+              assert(receipt.logs.length > 0, "No logs found in the receipt")
+
+              // Filter out the IPFSLinkAdded event logs
+              const event = receipt.logs.filter(
+                  (log) => log.fragment && log.fragment.name === "IPFSLinkAdded",
+              )[0]
+
+              // Ensure that the event was found
+              assert.exists(event, "Event IPFSLinkAdded should be emitted")
+
+              // Further assertions based on the event can be done here
+              const args = event.args
+              assert.equal(args[2], ipfsLink, "IPFS Link not set correctly")
           })
       })

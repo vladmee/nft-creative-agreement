@@ -25,6 +25,8 @@ contract EscrowContract {
     mapping(uint256 => string) public ipfsLinks; // code to IPFS link
     mapping(uint256 => EscrowInfo) public escrows; // code to escrow info
 
+    event IPFSLinkAdded(uint256 code, address creator, string ipfsLink, uint256 price);
+
     constructor(address _usdcAddress) {
         admin = msg.sender;
         usdc = IERC20(_usdcAddress);
@@ -51,5 +53,20 @@ contract EscrowContract {
 
     function revokeWhitelistNFT(address _nftAddress) external onlyAdmin {
         whitelistedNFTs[_nftAddress] = false;
+    }
+
+    function addIPFSLink(string memory _ipfsLink, uint256 _price) external returns (uint256) {
+        uint256 code = uint256(keccak256(abi.encodePacked(msg.sender, _ipfsLink, block.timestamp))) % 1000000;
+        ipfsLinks[code] = _ipfsLink;
+        escrows[code] = EscrowInfo({
+            creator: msg.sender,
+            nftOwner: address(0),
+            price: _price,
+            workCompleted: false
+        });
+
+        emit IPFSLinkAdded(code, msg.sender, _ipfsLink, _price);
+
+        return code;
     }
 }
